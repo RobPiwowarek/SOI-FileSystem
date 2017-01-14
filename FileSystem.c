@@ -4,6 +4,16 @@
 #include <memory.h>
 #include "FileSystem.h"
 
+/* TODO:
+ *
+ * 1. user size = 10kb tzn ze mozna wsadzic 10kb plik
+ * 2. usuniecie zbednych rewindow
+ * 3. usuniecie wielokrotnych mallocow
+ * 4. testy
+ * 5. zapis bitmap na dysku
+ * */
+
+
 int createVirtualFileSystem(SIZE size){
     FILE* file_ptr;
     SIZE system_size;
@@ -238,9 +248,54 @@ int copyFileFromVirtualDisk(char * file_name) {
 }
 
 int deleteFileFromVirtualDisk(char * file_name) {
-    FILE * 
+    FILE *vfs_ptr;
+    BLOCK* temp_block;
+    INODE* temp_inode;
+    int i, j;
 
-    return 0;
+    vfs_ptr = fopen("filesystem", "rb");
+
+    if (!vfs_ptr){
+        printf("Failed to open file system\n");
+        return -1;
+    }
+
+    for (i = 0; i < MAX_FILE_COUNT; ++i){
+        if (inode_bitmap[i] == 0)
+            continue;
+
+        fseek(vfs_ptr, getOffsetToInode(i), SEEK_SET);
+
+        temp_inode = (INODE*)malloc(sizeof(INODE));
+
+        if (strcmp(temp_inode->name, file_name) == 0){
+            temp_block = (BLOCK*)malloc(sizeof(BLOCK));
+
+            j = temp_inode->index_of_first_block;
+
+            do {
+                fseek(vfs_ptr, getOffsetToBlock(j), SEEK_SET);
+
+                fread(temp_block, sizeof(BLOCK), 1, vfs_ptr);
+
+                blocks_bitmap[j] = 0;
+
+                j = temp_block->next_block;
+
+            } while (temp_block->is_last != 1);
+
+            fclose(vfs_ptr);
+            free(temp_inode);
+            free(temp_block);
+            return 0;
+        }
+
+        fread(temp_inode, sizeof(INODE), 1, vfs_ptr);
+
+        free(temp_inode);
+    }
+
+    return -1;
 }
 
 int deleteVirtualDisk() {
