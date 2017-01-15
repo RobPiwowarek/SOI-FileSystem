@@ -204,8 +204,9 @@ int copyFileFromVirtualDisk(char * file_name) {
     BLOCK* temp_block;
     SIZE temp_size;
     FILE* vfs_ptr, *file_ptr;
-    int *i, j, equal;
+    int *i, j, equal, diff_blocks;
 
+    diff_blocks = 0;
     equal = 0;
     j = 0;
 
@@ -243,8 +244,6 @@ int copyFileFromVirtualDisk(char * file_name) {
 
     temp_size = temp_inode->size;
 
-    free(temp_inode);
-
     if (index == MAX_FILE_COUNT && equal == 0){
         printf("File named %s not found on disk\n", file_name);
         freeAllSystemPointers();
@@ -252,7 +251,7 @@ int copyFileFromVirtualDisk(char * file_name) {
         return -2;
     }
 
-    file_ptr = fopen(file_name, "r+b");
+    file_ptr = fopen(file_name, "w+b");
 
     truncate(file_name, temp_size);
 
@@ -281,18 +280,32 @@ int copyFileFromVirtualDisk(char * file_name) {
 
         fread(temp_block, sizeof(BLOCK), 1, vfs_ptr);
 
-        if (fwrite(temp_block, BLOCK_SIZE, 1, file_ptr) != 1){
-            printf("Error. Failed to write data to file_ptr\n");
-            freeAllSystemPointers();
-            fclose(file_ptr);
-            fclose(vfs_ptr);
-            free(i);
-            return 66;
+        if (getRequiredBlocksNumber(temp_inode->size)-diff_blocks > 1) {
+            if (fwrite(temp_block, BLOCK_SIZE, 1, file_ptr) != 1) {
+                printf("Error. Failed to write data to file_ptr\n");
+                freeAllSystemPointers();
+                fclose(file_ptr);
+                fclose(vfs_ptr);
+                free(i);
+                return 66;
+            }
+        }
+        else{
+            if (fwrite(temp_block, temp_inode->size - BLOCK_SIZE*diff_blocks, 1, file_ptr) != 1) {
+                printf("Error. Failed to write data to file_ptr\n");
+                freeAllSystemPointers();
+                fclose(file_ptr);
+                fclose(vfs_ptr);
+                free(i);
+                return 66;
+            }
+
         }
 
         // index of next block
 
         j = *i = temp_block->next_block;
+        ++diff_blocks;
 
     } while (*i == 0);
 
@@ -303,6 +316,7 @@ int copyFileFromVirtualDisk(char * file_name) {
 
     free(i);
     free(temp_block);
+    free(temp_inode);
 
     return 0;
 }
