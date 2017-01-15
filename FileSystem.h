@@ -14,11 +14,10 @@
 
 typedef uint32_t SIZE; // 32 bit == 4 bajt
 
-// BLOCKSIZE - 4 + 4 + 4
+// BLOCKSIZE + 4 + 4
 typedef struct block{
-    char data[BLOCK_SIZE - 4];
+    char data[BLOCK_SIZE];
     SIZE next_block;
-    SIZE is_last; // 0 - not last 1 - last
 } BLOCK;
 
 // MAX_NAME_LENGTH + 4 + 4
@@ -34,6 +33,7 @@ typedef struct SuperBlock {
     SIZE user_space_in_use;
     SIZE user_space;
     SIZE first_INode; // first inode index
+    SIZE total_blocks_number;
 
 } SUPERBLOCK;
 
