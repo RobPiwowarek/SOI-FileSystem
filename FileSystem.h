@@ -60,6 +60,8 @@ void displayCatalogue();
 
 void displayFileSystemInformation();
 
+void displayVirtualDiskStatus();
+
 int deleteFileFromVirtualDisk(char * file_name);
 
 int deleteVirtualDisk();

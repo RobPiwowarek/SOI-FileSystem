@@ -97,8 +97,6 @@ int copyFileFromPhysicalDisk(char *file_name) {
 
     file_size = getFileSize(file_ptr);
 
-    printf("FILE SIZE: %lu\n", file_size);
-
     if (!isEnoughSpaceLeft(file_size)){
         printf("Not enough space left\n");
         fclose(file_ptr);
@@ -127,8 +125,6 @@ int copyFileFromPhysicalDisk(char *file_name) {
     if (super_block->first_INode > inode_index){
         super_block->first_INode = (SIZE) inode_index;
     }
-
-    printf("INODE INDEX FOUND: %d I: %d\n", inode_index, i);
 
     fseek(vfs_ptr, getOffsetToInode(inode_index), SEEK_SET);
 
@@ -194,6 +190,8 @@ int copyFileFromPhysicalDisk(char *file_name) {
 
     fclose(vfs_ptr);
     fclose(file_ptr);
+
+    printf("Successfully copied file %s from physical disk\n", file_name);
 
     return 0;
 }
@@ -318,6 +316,8 @@ int copyFileFromVirtualDisk(char * file_name) {
     free(temp_block);
     free(temp_inode);
 
+    printf("Successfully copied file from virtual file system\n");
+
     return 0;
 }
 
@@ -400,10 +400,6 @@ int deleteFileFromVirtualDisk(char * file_name) {
         blocks_bitmap[j] = '\0';
     }
 
-    // find next first inode
-
-    printf("NODE: %d %c\n", i, inode_bitmap[i]);
-
     while (i < MAX_FILE_COUNT){
         if (inode_bitmap[i] == '1'){
             super_block->first_INode = (SIZE) i;
@@ -423,6 +419,9 @@ int deleteFileFromVirtualDisk(char * file_name) {
     free(temp_block);
     free(temp_inode);
     fclose(vfs_ptr);
+
+    printf("File successfully deleted from file system\n");
+
     return -1;
 }
 
@@ -432,7 +431,36 @@ int deleteVirtualDisk() {
         return -1;
     }
 
+    printf("VFS deleted\n");
+
     return 0;
+}
+
+void displayVirtualDiskStatus(){
+    int i, free_blocks, free_inodes;
+
+    for (i = 0, free_blocks = 0; i < super_block->total_blocks_number; ++i){
+        if (blocks_bitmap[i] == '\0'){
+            ++free_blocks;
+        }
+    }
+
+    for (i = 0, free_inodes = 0; i < MAX_FILE_COUNT; ++i){
+        if (inode_bitmap[i] == '\0'){
+            ++free_inodes;
+        }
+    }
+
+    printf("OFFSET    |    SIZE    |    COUNT    |    STATUS    |    TYPE    |\n");
+    printf("%10i|%12zu|%13d|          full|  superblock\n", SUPER_BLOCK_OFFSET, sizeof(SUPERBLOCK), 1);
+    printf("%10zu|%12zu|%13d|          ----|inode bitmap\n", sizeof(SUPERBLOCK), sizeof(char)*MAX_FILE_COUNT, MAX_FILE_COUNT);
+    printf("%10zu|%12zu|%13d|          ----|block bitmap\n", sizeof(SUPERBLOCK)+sizeof(char)*MAX_FILE_COUNT, sizeof(char)*super_block->total_blocks_number, super_block->total_blocks_number);
+    printf("%10i|%12zu|%13d|          free|      inodes\n", getOffsetToInode(getIndexOfFirstFreeInode()), free_inodes*sizeof(INODE), free_inodes);
+    printf("%10i|%12zu|%13d|          full|      inodes\n", getOffsetToInode(super_block->first_INode), (MAX_FILE_COUNT-free_inodes)*sizeof(INODE), MAX_FILE_COUNT-free_inodes);
+    printf("%10i|%12zu|%13d|          free| data blocks\n", getOffsetToBlock(0), sizeof(BLOCK)*free_blocks, free_blocks);
+    printf("      ----|%12zu|%13d|          full| data blocks\n\n", sizeof(BLOCK)*(super_block->total_blocks_number-free_blocks), super_block->total_blocks_number-free_blocks);
+
+    freeAllSystemPointers();
 }
 
 void displayCatalogue(){
@@ -541,6 +569,11 @@ int main(int argc, char* argv[]) {
             loadFileSystem();
 
             displayFileSystemInformation();
+            return 0;
+        case 'i':
+            loadFileSystem();
+
+            displayVirtualDiskStatus();
             return 0;
         case 'd' :
             loadFileSystem();
