@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#define MAX_FILE_COUNT 2048
+#define MAX_FILE_COUNT 100
 #define MAX_NAME_LENGTH 30
 #define BLOCK_SIZE 4096
 #define SUPER_BLOCK_OFFSET 0
@@ -14,20 +14,20 @@
 
 typedef uint32_t SIZE; // 32 bit == 4 bajt
 
-// BLOCKSIZE + 4 + 4
+// BLOCKSIZE + 4 + 4 = 5004
 typedef struct block{
     char data[BLOCK_SIZE];
     SIZE next_block;
 } BLOCK;
 
-// MAX_NAME_LENGTH + 4 + 4
+// MAX_NAME_LENGTH + 4 + 4 = 38
 typedef struct INode{
     char name[MAX_NAME_LENGTH];
     SIZE size; // total file size
     SIZE index_of_first_block;
 } INODE;
 
-// 4 + 4
+// 4 + 4 + 4 + 4 + 4 = 20
 typedef struct SuperBlock {
     SIZE size; // system size
     SIZE user_space_in_use;
@@ -37,18 +37,18 @@ typedef struct SuperBlock {
 
 } SUPERBLOCK;
 
-// FILESYSTEM VARIABLES
+/*
+ * FILE SYSTEM VARIABLES
+ */
 
-BLOCK* current_block;
-INODE* current_inode;
 SUPERBLOCK* super_block;
 
-// OTHER VARIABLES
+char inode_bitmap[MAX_FILE_COUNT];
+char *blocks_bitmap;
 
-int inode_bitmap[MAX_FILE_COUNT];
-int *blocks_bitmap;
-
-// FILESYSTEM FUNCTIONALITY
+/*
+ * FILE SYSTEM FUNCTIONALITY/API
+ */
 
 int createVirtualFileSystem(SIZE size); // size - number of bytes
 
@@ -64,7 +64,9 @@ int deleteFileFromVirtualDisk(char * file_name);
 
 int deleteVirtualDisk();
 
-// HELPERS
+/*
+ * HELPERS
+ */
 
 int isFileOnVirtualDisk(char *filename, FILE* opened_vfs_ptr);
 
@@ -86,17 +88,10 @@ int getIndexOfFirstFreeInode();
 
 int getIndexOfFirstFreeBlock();
 
+void loadFileSystem();
 
+void saveFileSystem(FILE *vfs_ptr);
 
-
-
-
-
-
-
-
-
-
-
+void freeAllSystemPointers();
 
 #endif //FILESYSTEM_FILESYSTEM_H
