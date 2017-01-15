@@ -13,7 +13,7 @@ int createVirtualFileSystem(SIZE size){
     SIZE system_size;
     SIZE blocks_number;
 
-    file_ptr = fopen("filesystem", "wb");
+    file_ptr = fopen("filesystem", "w+b");
 
     if (!file_ptr){
         printf("Unable to create filesystem\n");
@@ -67,7 +67,7 @@ int copyFileFromPhysicalDisk(char *file_name) {
     printf("file name %s\n", file_name);
 
     file_ptr = fopen(file_name, "r");
-    vfs_ptr = fopen("filesystem", "w+b");
+    vfs_ptr = fopen("filesystem", "r+b");
 
     if (!file_ptr){
         printf("Error. Failed to open file %s\n", file_name);
@@ -128,7 +128,10 @@ int copyFileFromPhysicalDisk(char *file_name) {
         super_block->first_INode = (SIZE) inode_index;
     }
 
+    printf("INODE INDEX FOUND: %d I: %d\n", inode_index, i);
+
     fseek(vfs_ptr, getOffsetToInode(inode_index), SEEK_SET);
+
     if (fwrite(temp_inode, sizeof(INODE), 1, vfs_ptr) != 1){
         printf("Error. Failed to write inode to file system\n");
         free(temp_inode);
@@ -249,7 +252,7 @@ int copyFileFromVirtualDisk(char * file_name) {
         return -2;
     }
 
-    file_ptr = fopen(file_name, "w+b");
+    file_ptr = fopen(file_name, "r+b");
 
     truncate(file_name, temp_size);
 
@@ -316,7 +319,7 @@ int deleteFileFromVirtualDisk(char * file_name) {
         return -2;
     }
 
-    vfs_ptr = fopen("filesystem", "rb");
+    vfs_ptr = fopen("filesystem", "r+b");
 
     if (!vfs_ptr){
         printf("Failed to open file system\n");
@@ -324,66 +327,88 @@ int deleteFileFromVirtualDisk(char * file_name) {
         return -1;
     }
 
+    // find index of inode with file
+
     temp_inode = (INODE*)malloc(sizeof(INODE));
 
-    for (i = super_block->first_INode; i < MAX_FILE_COUNT; ++i){
-
-        fseek(vfs_ptr, getOffsetToInode(i), SEEK_SET);
-
-        fread(temp_inode, sizeof(INODE), 1, vfs_ptr);
-
-        if (strcmp(temp_inode->name, file_name) == 0){
-            temp_block = (BLOCK*)malloc(sizeof(BLOCK));
-
-            j = temp_inode->index_of_first_block;
-
-            inode_bitmap[i] = '\0';
-
-            do {
-                fseek(vfs_ptr, getOffsetToBlock(j), SEEK_SET);
-
-                fread(temp_block, sizeof(BLOCK), 1, vfs_ptr);
-
-                blocks_bitmap[j] = '\0';
-
-                j = temp_block->next_block;
-
-                super_block->user_space_in_use -= sizeof(BLOCK);
-
-            } while (temp_block->next_block != super_block->total_blocks_number);
-
-            // update first inode in superblock, remove old
-            for (j = i; j < MAX_FILE_COUNT; ++j){
-                if (j <= MAX_FILE_COUNT-1 && inode_bitmap[j] == '1'){
-                    super_block->first_INode = (SIZE) j;
-                    break;
-                }
-
-            }
-
-            inode_bitmap[i] = '\0';
-
-            if (j == MAX_FILE_COUNT){
-                super_block->first_INode = MAX_FILE_COUNT;
-            }
-
-            rewind(vfs_ptr);
-            saveFileSystem(vfs_ptr);
-            freeAllSystemPointers();
-
-            fclose(vfs_ptr);
-            free(temp_inode);
-            free(temp_block);
-            return 0;
-        }
-
-        fread(temp_inode, sizeof(INODE), 1, vfs_ptr);
-
-        free(temp_inode);
+    if (!temp_inode){
+        printf("Error. Failed to allocate memory for temp_inode\n");
+        freeAllSystemPointers();
+        fclose((vfs_ptr));
+        return -3;
     }
 
-    freeAllSystemPointers();
+    printf("filesystem first node: %d\n", super_block->first_INode);
 
+    for (i = super_block->first_INode; i < MAX_FILE_COUNT; ++i){
+        fseek(vfs_ptr, getOffsetToInode(i), SEEK_SET);
+
+        if (fread(temp_inode, sizeof(INODE), 1, vfs_ptr) != 1){
+            printf("Error. Failed to read to temp_inode\n");
+            freeAllSystemPointers();
+            fclose(vfs_ptr);
+            free(temp_inode);
+            return -2;
+        }
+
+        if (strcmp(temp_inode->name, file_name)==0) break;
+
+    }
+
+    if (i == MAX_FILE_COUNT){
+        printf("No such file in file system\n");
+        fclose(vfs_ptr);
+        freeAllSystemPointers();
+        free(temp_inode);
+        return -3;
+    }
+
+    inode_bitmap[i] = '\0';
+
+    // find blocks to remove
+
+    temp_block = (BLOCK*)malloc(sizeof(BLOCK));
+
+    for (j = temp_inode->index_of_first_block; j < super_block->total_blocks_number; j = temp_block->next_block) {
+        fseek(vfs_ptr, getOffsetToBlock(j), SEEK_SET);
+
+        if (fread(temp_block, sizeof(BLOCK), 1, vfs_ptr) != 1) {
+            printf("Error. Could not read to temp_block\n");
+            freeAllSystemPointers();
+            free(temp_block);
+            free(temp_inode);
+            fclose(vfs_ptr);
+            return -4;
+        }
+
+        super_block->user_space_in_use -= sizeof(BLOCK);
+
+        blocks_bitmap[j] = '\0';
+    }
+
+    // find next first inode
+
+    printf("NODE: %d %c\n", i, inode_bitmap[i]);
+
+    while (i < MAX_FILE_COUNT){
+        if (inode_bitmap[i] == '1'){
+            super_block->first_INode = (SIZE) i;
+            break;
+        }
+
+        ++i;
+    }
+
+    if (i == MAX_FILE_COUNT){
+        super_block->first_INode = MAX_FILE_COUNT;
+    }
+
+    rewind(vfs_ptr);
+    saveFileSystem(vfs_ptr);
+    freeAllSystemPointers();
+    free(temp_block);
+    free(temp_inode);
+    fclose(vfs_ptr);
     return -1;
 }
 
@@ -461,7 +486,6 @@ void displayFileSystemInformation(){
     printf("USER SPACE IN USE:     %d\n", super_block->user_space_in_use);
     printf("FREE SPACE:            %d\n", super_block->user_space-super_block->user_space_in_use);
 
-
     freeAllSystemPointers();
 
     fclose(file_ptr);
@@ -522,7 +546,12 @@ int main(int argc, char* argv[]) {
 }
 
 SIZE getRequiredBlocksNumber(unsigned long file_size){
-    return (SIZE) (file_size / (BLOCK_SIZE)) + 1;
+
+    if (file_size % BLOCK_SIZE == 0) return (SIZE) (file_size / BLOCK_SIZE);
+    else{
+        return (SIZE) (file_size / (BLOCK_SIZE)) + 1;
+    }
+
 }
 
 int isEnoughSpaceLeft(unsigned long size){
@@ -554,11 +583,11 @@ int isFreeInodeLeft(){
 }
 
 SIZE getOffsetToInode(int index){
-    return index*sizeof(INODE) + sizeof(SUPERBLOCK) + sizeof(int)*MAX_FILE_COUNT + sizeof(int)*super_block->total_blocks_number;
+    return index*sizeof(INODE) + sizeof(SUPERBLOCK) + sizeof(char)*MAX_FILE_COUNT + sizeof(char)*super_block->total_blocks_number;
 }
 
 SIZE getOffsetToBlock(int index){
-    return index*sizeof(BLOCK) + MAX_FILE_COUNT*sizeof(INODE) + sizeof(SUPERBLOCK) + sizeof(int)*MAX_FILE_COUNT + sizeof(int)*super_block->total_blocks_number;
+    return index*sizeof(BLOCK) + MAX_FILE_COUNT*sizeof(INODE) + sizeof(SUPERBLOCK) + sizeof(char)*MAX_FILE_COUNT + sizeof(char)*super_block->total_blocks_number;
 }
 
 int getIndexOfFirstFreeInode(){
@@ -566,7 +595,7 @@ int getIndexOfFirstFreeInode(){
 
     for (i = 0; i < MAX_FILE_COUNT; ++i){
         if (inode_bitmap[i] == '\0'){
-            return i*sizeof(INODE) + sizeof(SUPERBLOCK);
+            return i;
         }
     }
 }
@@ -628,7 +657,7 @@ int isFileOnVirtualDisk(char* filename, FILE* vfs_ptr){
 void loadFileSystem(){
     FILE* vfs_ptr;
 
-    vfs_ptr = fopen("filesystem", "rb");
+    vfs_ptr = fopen("filesystem", "r+b");
 
     if (!vfs_ptr){
         printf("Error. Could not find filesystem file\n");
@@ -642,6 +671,8 @@ void loadFileSystem(){
         fclose(vfs_ptr);
         exit(EXIT_SUCCESS);
     }
+
+    fseek(vfs_ptr, SUPER_BLOCK_OFFSET, SEEK_SET);
 
     if (fread(super_block, sizeof(SUPERBLOCK), 1, vfs_ptr) != 1){
         printf("Error. Failed to read super_block\n");
@@ -679,11 +710,24 @@ void loadFileSystem(){
 
 void saveFileSystem(FILE *vfs_ptr){
 
-    fwrite(super_block, sizeof(SUPERBLOCK), 1, vfs_ptr);
+    if (fwrite(super_block, sizeof(SUPERBLOCK), 1, vfs_ptr) != 1){
+        printf("Error. Could not write super_block\n");
+        fclose(vfs_ptr);
+        exit(EXIT_SUCCESS);
+    }
 
-    fwrite(inode_bitmap, sizeof(char), MAX_FILE_COUNT, vfs_ptr);
+    if (fwrite(inode_bitmap, MAX_FILE_COUNT*sizeof(char), 1, vfs_ptr) != 1){
+        printf("Error. Could not write inode bitmap\n");
+        fclose(vfs_ptr);
+        exit(EXIT_SUCCESS);
+    }
 
-    fwrite(blocks_bitmap, sizeof(char), super_block->total_blocks_number, vfs_ptr);
+    if (fwrite(blocks_bitmap, super_block->total_blocks_number*sizeof(char), 1, vfs_ptr) != 1){
+        printf("Error. Could not write block bitmap\n");
+        fclose(vfs_ptr);
+        exit(EXIT_SUCCESS);
+
+    }
 
 }
 
