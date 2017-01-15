@@ -42,43 +42,14 @@ int createVirtualFileSystem(SIZE size){
     super_block->user_space_in_use = 0;
     super_block->total_blocks_number = blocks_number;
 
-    // setup block bitmap
-    blocks_bitmap = (char*)calloc(blocks_number, sizeof(char));
-
-    if (!blocks_bitmap){
-        printf("Error. Could not allocate memory for block bitmap\n");
-
-        fclose(file_ptr);
-        free(super_block);
-        return 7;
-    }
-
     if (fwrite(super_block, sizeof(SUPERBLOCK), 1, file_ptr) != 1){
          printf("Error. Could not write superblock data\n");
-
-        free(blocks_bitmap);
 
         fclose(file_ptr);
         return 2;
     }
 
-    if (fwrite(inode_bitmap, sizeof(char), MAX_FILE_COUNT, file_ptr) != MAX_FILE_COUNT){
-        printf("Error. Could not write inode bitmap data\n");
-
-        fclose(file_ptr);
-        return 3;
-    }
-
-    if (fwrite(blocks_bitmap, sizeof(char), blocks_number, file_ptr) != blocks_number){
-        printf("Error. Could not write block bitmap data\n");
-
-        fclose(file_ptr);
-        return 4;
-    }
-
     printf("Successfully created file system\n");
-
-    freeAllSystemPointers();
 
     fclose(file_ptr);
     return 0;
@@ -126,6 +97,8 @@ int copyFileFromPhysicalDisk(char *file_name) {
 
     file_size = getFileSize(file_ptr);
 
+    printf("FILE SIZE: %lu\n", file_size);
+
     if (!isEnoughSpaceLeft(file_size)){
         printf("Not enough space left\n");
         fclose(file_ptr);
@@ -168,7 +141,7 @@ int copyFileFromPhysicalDisk(char *file_name) {
 
     for (j = 0, blocks = getRequiredBlocksNumber(file_size); j < blocks; ++j){
 
-        if (fread(temp_block->data, BLOCK_SIZE-sizeof(SIZE), 1, file_ptr) != BLOCK_SIZE-sizeof(SIZE)){
+        if (fread(temp_block->data, BLOCK_SIZE - sizeof(SIZE), 1, file_ptr) != 1) {
             printf("Error. Failed to read data from file\n");
 
             free(temp_block);
@@ -351,7 +324,7 @@ int deleteFileFromVirtualDisk(char * file_name) {
 
                 fread(temp_block, sizeof(BLOCK), 1, vfs_ptr);
 
-                blocks_bitmap[j] = '0';
+                blocks_bitmap[j] = '\0';
 
                 j = temp_block->next_block;
 
@@ -366,7 +339,7 @@ int deleteFileFromVirtualDisk(char * file_name) {
 
             }
 
-            inode_bitmap[i] = '0';
+            inode_bitmap[i] = '\0';
 
             if (j == MAX_FILE_COUNT){
                 super_block->first_INode = MAX_FILE_COUNT;
@@ -535,10 +508,14 @@ int isEnoughSpaceLeft(unsigned long size){
     int i;
 
     for (i = 0, blocks = 0; i < super_block->total_blocks_number; ++i){
-        if (blocks_bitmap[i] == '0'){
+        printf("Block: %d bitmap: %c\n", i, blocks_bitmap[i]);
+
+        if (blocks_bitmap[i] == '\0'){
             ++blocks;
         }
     }
+
+    printf("BLOCKS: %d\n", blocks);
 
     if (blocks >= getRequiredBlocksNumber(size))
         return 1;
@@ -550,7 +527,7 @@ int isFreeInodeLeft(){
     int i;
 
     for (i = 0; i < MAX_FILE_COUNT; ++i){
-        if (inode_bitmap[i] == '0'){
+        if (inode_bitmap[i] == '\0'){
             return 1;
         }
     }
@@ -570,7 +547,7 @@ int getIndexOfFirstFreeInode(){
     int i;
 
     for (i = 0; i < MAX_FILE_COUNT; ++i){
-        if (inode_bitmap[i] == '0'){
+        if (inode_bitmap[i] == '\0'){
             return i*sizeof(INODE) + sizeof(SUPERBLOCK);
         }
     }
@@ -580,7 +557,7 @@ int getIndexOfFirstFreeBlock(){
     int i;
 
     for (i = 0; i < super_block->total_blocks_number; ++i){
-        if (blocks_bitmap[i] == '0'){
+        if (blocks_bitmap[i] == '\0'){
             return i;
         }
     }
@@ -609,7 +586,7 @@ int isFileOnVirtualDisk(char* filename, FILE* vfs_ptr){
 
     for (i = super_block->first_INode; i < MAX_FILE_COUNT; ++i){
 
-        if (inode_bitmap[i] == '0'){
+        if (inode_bitmap[i] == '\0'){
             continue;
         }
 
