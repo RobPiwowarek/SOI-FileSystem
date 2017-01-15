@@ -251,8 +251,6 @@ int copyFileFromVirtualDisk(char * file_name) {
 
     file_ptr = fopen(file_name, "w+b");
 
-    truncate(file_name, temp_size);
-
     if (!file_ptr){
         printf("Error. Could not create %s\n", file_name);
         freeAllSystemPointers();
@@ -305,7 +303,7 @@ int copyFileFromVirtualDisk(char * file_name) {
         j = *i = temp_block->next_block;
         ++diff_blocks;
 
-    } while (*i == 0);
+    } while (*i != super_block->total_blocks_number);
 
     freeAllSystemPointers();
 
