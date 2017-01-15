@@ -123,6 +123,11 @@ int copyFileFromPhysicalDisk(char *file_name) {
     temp_inode->size = (SIZE)file_size;
 
     inode_bitmap[inode_index] = '1';
+
+    if (super_block->first_INode > inode_index){
+        super_block->first_INode = (SIZE) inode_index;
+    }
+
     fseek(vfs_ptr, getOffsetToInode(inode_index), SEEK_SET);
     if (fwrite(temp_inode, sizeof(INODE), 1, vfs_ptr) != 1){
         printf("Error. Failed to write inode to file system\n");
@@ -141,7 +146,7 @@ int copyFileFromPhysicalDisk(char *file_name) {
 
     for (j = 0, blocks = getRequiredBlocksNumber(file_size); j < blocks; ++j){
 
-        if (fread(temp_block->data, BLOCK_SIZE - sizeof(SIZE), 1, file_ptr) != 1) {
+        if (fread(temp_block->data, BLOCK_SIZE, 1,file_ptr) != 1 && !feof(file_ptr)) {
             printf("Error. Failed to read data from file\n");
 
             free(temp_block);
@@ -193,6 +198,8 @@ int copyFileFromPhysicalDisk(char *file_name) {
 int copyFileFromVirtualDisk(char * file_name) {
     SIZE index;
     INODE* temp_inode;
+    BLOCK* temp_block;
+    SIZE temp_size;
     FILE* vfs_ptr, *file_ptr;
     int *i, j, equal;
 
@@ -231,6 +238,8 @@ int copyFileFromVirtualDisk(char * file_name) {
 
     } while(equal == 0 && index != MAX_FILE_COUNT);
 
+    temp_size = temp_inode->size;
+
     free(temp_inode);
 
     if (index == MAX_FILE_COUNT && equal == 0){
@@ -242,6 +251,8 @@ int copyFileFromVirtualDisk(char * file_name) {
 
     file_ptr = fopen(file_name, "w+b");
 
+    truncate(file_name, temp_size);
+
     if (!file_ptr){
         printf("Error. Could not create %s\n", file_name);
         freeAllSystemPointers();
@@ -251,10 +262,23 @@ int copyFileFromVirtualDisk(char * file_name) {
 
     i = (int*)calloc(1, sizeof(int));
 
+    temp_block = (BLOCK*) malloc(sizeof(BLOCK));
+
+    if (!temp_block){
+        printf("Error. Failed to allocate memory for temp_block\n");
+
+        freeAllSystemPointers();
+        fclose(file_ptr);
+        fclose(vfs_ptr);
+        free(i);
+    }
+
     do {
         fseek(vfs_ptr, getOffsetToBlock(j), SEEK_SET);
 
-        if (fwrite(file_ptr, sizeof(BLOCK)-sizeof(SIZE), 1, vfs_ptr) != 1){
+        fread(temp_block, sizeof(BLOCK), 1, vfs_ptr);
+
+        if (fwrite(temp_block, BLOCK_SIZE, 1, file_ptr) != 1){
             printf("Error. Failed to write data to file_ptr\n");
             freeAllSystemPointers();
             fclose(file_ptr);
@@ -265,16 +289,7 @@ int copyFileFromVirtualDisk(char * file_name) {
 
         // index of next block
 
-        if (fwrite(i, sizeof(SIZE), 1, vfs_ptr) != 1){
-            printf("Error. Failed to write index of next block to file_ptr\n");
-            freeAllSystemPointers();
-            fclose(file_ptr);
-            fclose(vfs_ptr);
-            free(i);
-            return 65;
-        }
-
-        j = *i;
+        j = *i = temp_block->next_block;
 
     } while (*i == 0);
 
@@ -284,6 +299,7 @@ int copyFileFromVirtualDisk(char * file_name) {
     fclose(file_ptr);
 
     free(i);
+    free(temp_block);
 
     return 0;
 }
@@ -308,16 +324,20 @@ int deleteFileFromVirtualDisk(char * file_name) {
         return -1;
     }
 
+    temp_inode = (INODE*)malloc(sizeof(INODE));
+
     for (i = super_block->first_INode; i < MAX_FILE_COUNT; ++i){
 
         fseek(vfs_ptr, getOffsetToInode(i), SEEK_SET);
 
-        temp_inode = (INODE*)malloc(sizeof(INODE));
+        fread(temp_inode, sizeof(INODE), 1, vfs_ptr);
 
         if (strcmp(temp_inode->name, file_name) == 0){
             temp_block = (BLOCK*)malloc(sizeof(BLOCK));
 
             j = temp_inode->index_of_first_block;
+
+            inode_bitmap[i] = '\0';
 
             do {
                 fseek(vfs_ptr, getOffsetToBlock(j), SEEK_SET);
@@ -327,6 +347,8 @@ int deleteFileFromVirtualDisk(char * file_name) {
                 blocks_bitmap[j] = '\0';
 
                 j = temp_block->next_block;
+
+                super_block->user_space_in_use -= sizeof(BLOCK);
 
             } while (temp_block->next_block != super_block->total_blocks_number);
 
@@ -403,7 +425,7 @@ void displayCatalogue(){
 
             fread(temp_inode, sizeof(INODE), 1, vfs_ptr);
 
-            printf("File: %s Size: %d First Bloc k: %d\n", temp_inode->name, temp_inode->size, temp_inode->index_of_first_block);
+            printf("File: %s Size: %d First Block: %d\n", temp_inode->name, temp_inode->size, temp_inode->index_of_first_block);
         }
     }
 
@@ -508,14 +530,10 @@ int isEnoughSpaceLeft(unsigned long size){
     int i;
 
     for (i = 0, blocks = 0; i < super_block->total_blocks_number; ++i){
-        printf("Block: %d bitmap: %c\n", i, blocks_bitmap[i]);
-
         if (blocks_bitmap[i] == '\0'){
             ++blocks;
         }
     }
-
-    printf("BLOCKS: %d\n", blocks);
 
     if (blocks >= getRequiredBlocksNumber(size))
         return 1;
@@ -625,7 +643,11 @@ void loadFileSystem(){
         exit(EXIT_SUCCESS);
     }
 
-    fread(super_block, sizeof(SUPERBLOCK), 1, vfs_ptr);
+    if (fread(super_block, sizeof(SUPERBLOCK), 1, vfs_ptr) != 1){
+        printf("Error. Failed to read super_block\n");
+        fclose(vfs_ptr);
+        exit(EXIT_SUCCESS);
+    }
 
     blocks_bitmap = (char*)malloc(sizeof(char)*super_block->total_blocks_number);
 
