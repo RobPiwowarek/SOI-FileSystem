@@ -185,7 +185,7 @@ int copyFileFromPhysicalDisk(char *file_name) {
 
     free(temp_block);
 
-    super_block->user_space_in_use += blocks*sizeof(BLOCK);
+    super_block->user_space_in_use += blocks*BLOCK_SIZE;
 
     rewind(vfs_ptr);
     saveFileSystem(vfs_ptr);
