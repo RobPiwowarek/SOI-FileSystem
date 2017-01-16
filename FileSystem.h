@@ -34,7 +34,6 @@ typedef struct SuperBlock {
     SIZE user_space;
     SIZE first_INode; // first inode index
     SIZE total_blocks_number;
-
 } SUPERBLOCK;
 
 /*

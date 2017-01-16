@@ -4,10 +4,6 @@
 #include <memory.h>
 #include "FileSystem.h"
 
-/* TODO:
- * 4. testy
- * */
-
 int createVirtualFileSystem(SIZE size){
     FILE* file_ptr;
     SIZE system_size;
@@ -393,10 +389,12 @@ int deleteFileFromVirtualDisk(char * file_name) {
             return -4;
         }
 
-        super_block->user_space_in_use -= sizeof(BLOCK);
+        super_block->user_space_in_use -= BLOCK_SIZE;
 
         blocks_bitmap[j] = '\0';
     }
+
+    i = 0;
 
     while (i < MAX_FILE_COUNT){
         if (inode_bitmap[i] == '1'){
@@ -466,6 +464,8 @@ void displayCatalogue(){
     int temp_index;
     FILE* vfs_ptr;
     INODE* temp_inode;
+
+    printf("first inode %d\n", super_block->first_INode);
 
     if (super_block->first_INode == MAX_FILE_COUNT){
         printf("No files in file system.\n");
